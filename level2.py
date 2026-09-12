@@ -6,8 +6,23 @@ from collections import Counter
 from pathlib import Path
 
 
-# Oak, Rose Bush, Lavender, Dwarf Sunflower, Grass.
-STARTERS = (12, 2, 6, 5, 1)
+# Ordered left-to-right across the grid's columns. Grass and Rose Bush sit
+# together at one edge, insulated by a Dwarf Sunflower buffer band from the
+# Oak Tree / Lavender edge on the other side (where Orange Blossom gets
+# seeded and explodes outward, invasiveness_rank 7 with spread_range 4).
+# This keeps the two species we need coverage thresholds for (Grass >= 5%,
+# Rose Bush >= 4%, to unlock Razorgrass and Ironthorn Shrub) as far as
+# possible from the map's most invasive species.
+STARTERS = (1, 2, 5, 12, 6)  # Grass | Rose Bush | Dwarf Sunflower | Oak Tree | Lavender
+
+# 300 days x 18 starter slots / 5 species = 1080 guaranteed placements per
+# species across the whole game. A region smaller than that makes the
+# placement pointer wrap around and re-plant cells instead of reaching
+# fresh ones, so every region needs at least this many cells. Anything
+# above that 5x1080 floor goes entirely to Grass and Rose Bush, since those
+# are the two species gating the Razorgrass / Ironthorn Shrub unlocks.
+REGION_FLOOR = 1080
+BOOST_SPECIES = (1, 2)  # Grass, Rose Bush split all the surplus cells.
 
 # Orange Blossom, Razorgrass, Ironthorn Shrub.
 UNLOCK_ATTEMPTS = (7, 19, 16)
@@ -33,13 +48,24 @@ def make_regions(level):
             ):
                 suitable.append((row, col))
 
-    regions = {plant: [] for plant in STARTERS}
+    total = len(suitable)
+    slack = total - REGION_FLOOR * len(STARTERS)
 
-    # Divide suitable cells into five vertical regions.
-    for index, cell in enumerate(suitable):
-        region_index = min(4, index * 5 // len(suitable))
-        species = STARTERS[region_index]
-        regions[species].append(cell)
+    if slack < 0:
+        raise ValueError("Not enough suitable cells for this map.")
+
+    sizes = {species: REGION_FLOOR for species in STARTERS}
+    boost_each, remainder = divmod(slack, len(BOOST_SPECIES))
+    for species in BOOST_SPECIES:
+        sizes[species] += boost_each
+    sizes[BOOST_SPECIES[0]] += remainder  # keep the total exact
+
+    regions = {}
+    start = 0
+    for species in STARTERS:
+        end = start + sizes[species]
+        regions[species] = suitable[start:end]
+        start = end
 
     # Plant spaced positions before filling their neighbours.
     def spacing_key(cell):
@@ -130,8 +156,15 @@ def generate(level):
                 })
                 occupied.add((row, col))
 
-            # Reduce early oak expansion and support rose-based unlocks.
-            if tick < 450:
+            # Suppress Oak Tree for the first two waves so it can't spread
+            # across the map before Grass/Rose Bush coverage is established;
+            # channel that quota into extra Rose Bush coverage instead (a
+            # cell's species only affects the global coverage count, not
+            # its location, so this tops up Rose Bush's percentage without
+            # any added invasion exposure). Oak only plants for real in the
+            # final wave (tick >= 400), giving it a contained ~100-tick
+            # window to mature and spread.
+            if tick < 400:
                 for plant in plants:
                     if plant["plant_index"] == 12:
                         plant["plant_index"] = 2

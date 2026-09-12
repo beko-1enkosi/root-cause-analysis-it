@@ -130,6 +130,12 @@ def generate(level):
                 })
                 occupied.add((row, col))
 
+            # Reduce early oak expansion and support rose-based unlocks.
+            if tick < 450:
+                for plant in plants:
+                    if plant["plant_index"] == 12:
+                        plant["plant_index"] = 2
+
             actions.append({
                 "tick": tick,
                 "plants": plants,

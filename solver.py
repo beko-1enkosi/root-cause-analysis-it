@@ -1,5 +1,11 @@
 """Deterministic Level 1 baseline; the official simulator evaluates survival."""
-STARTERS = (12, 2, 6, 5, 1)
+
+# Ordered so the two most invasive starters (Oak Tree, Dwarf Sunflower) sit at
+# the outer edges of the grid, each exposed to only ONE neighbouring band to
+# invade. The weaker starters (Lavender, Grass, Rose Bush) are sandwiched in
+# the middle so no single band gets squeezed by aggressive spreaders from
+# both sides at once.
+STARTERS = (12, 6, 1, 2, 5)  # Oak Tree | Lavender | Grass | Rose Bush | Dwarf Sunflower
 
 
 def planting_cells(level):
@@ -26,7 +32,7 @@ def solve(level):
 
     if start < 0:
         raise ValueError('Insufficient ticks to plant every suitable cell once')
-    
+
     for offset in range(0, len(cells), 20):
         plants = []
         for position in range(offset, min(offset + 20, len(cells))):
